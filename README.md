@@ -265,11 +265,11 @@ The `Commitlint` workflow enforces the conventional-commit format on every pull
 request, so the release analysis always has reliable input. Commit messages
 must use a lowercase type and one of the types listed above.
 
-CI tooling lives in `package.json` (`npm ci` installs it). To preview the next
-release locally:
+CI tooling lives in `.github/workflows/` (`package.json` there, installed with
+`npm ci`). To preview the next release locally:
 
 ```sh
-GITHUB_TOKEN=<token> npx semantic-release --dry-run
+cd .github/workflows && GITHUB_TOKEN=<token> npx semantic-release --dry-run
 ```
 
 ## Documentation
