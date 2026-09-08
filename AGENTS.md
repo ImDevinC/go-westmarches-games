@@ -33,6 +33,12 @@ rewards.go          Bulk rewards endpoint
 marketplace.go      Marketplace endpoints
 currencies.go       Currency endpoints
 *_test.go           Unit tests using httptest (see Testing)
+.github/workflows/  CI: commitlint (PRs) and release (pushes to main); also
+                    holds the CI tooling: package.json/package-lock.json
+                    (commitlint + semantic-release deps), commitlint.config.js
+                    (conventional-commit rules enforced on PRs), and
+                    .releaserc.js (semantic-release config: vX.Y.Z tags +
+                    GitHub releases)
 README.md           User-facing documentation
 AGENTS.md           This file
 ```
