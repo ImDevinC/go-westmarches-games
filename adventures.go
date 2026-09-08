@@ -6,8 +6,9 @@ import (
 )
 
 // ListAdventures returns all published (non-draft) adventures in the community
-// tied to the API key, ordered by start time descending. Pass this method to
-// CollectAll to retrieve every page in one call.
+// tied to the API key, ordered by start time descending. Pass a closure
+// wrapping this method to Walk or CollectAll to retrieve every page in one
+// call.
 func (c *Client) ListAdventures(ctx context.Context, opts ListOptions) (*Page[AdventureSummary], error) {
 	data, err := c.do(ctx, "GET", "/adventures"+queryFromOptions(opts, nil), nil)
 	if err != nil {

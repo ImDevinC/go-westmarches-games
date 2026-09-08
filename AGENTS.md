@@ -25,7 +25,7 @@ errors.go           *APIError, sentinel errors
 ratelimit.go        Client-side token-bucket rate limiter
 types.go            All API schema structs (characters, adventures, wiki, rewards,
                     marketplace, currencies, D&D Beyond stats, etc.)
-pagination.go       ListOptions, Page[T], CollectAll pagination helper
+pagination.go       ListOptions, Page[T], Walk/CollectAll pagination helpers
 characters.go       Character endpoints
 adventures.go       Adventure endpoints
 wiki.go             Wiki article endpoints
@@ -100,9 +100,12 @@ and keep tests in `ratelimit_test.go` and `client_test.go` in sync.
 
 List endpoints accept `page` (default 1) and `pageSize` (default 500, max 500;
 wiki articles default to 100) query parameters and return a `pagination`
-object. `Page[T]` and `CollectAll` in `pagination.go` provide typed access and
-full-result walking. If the API changes pagination semantics, update
-`pagination.go`, its tests, and the README.
+object. `Page[T]`, `Walk`, and `CollectAll` in `pagination.go` provide typed
+access and full-result walking. `Walk` is the idiomatic primitive: it drives
+the page loop internally and invokes a callback per page, supporting early
+termination via `ErrStopIteration`. `CollectAll` is a convenience wrapper that
+materializes the full result set on top of `Walk`. If the API changes
+pagination semantics, update `pagination.go`, its tests, and the README.
 
 ## Testing
 

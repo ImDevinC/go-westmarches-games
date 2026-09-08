@@ -25,8 +25,8 @@ func (c *Client) listCharactersPage(ctx context.Context, page, pageSize int) (*P
 }
 
 // ListCharacters returns all non-deleted characters in the community tied to
-// the API key, ordered by level descending. Pass a *PageFetcher to
-// CollectAll to retrieve every page in one call.
+// the API key, ordered by level descending. Pass a closure wrapping this
+// method to Walk or CollectAll to retrieve every page in one call.
 func (c *Client) ListCharacters(ctx context.Context, opts ListOptions) (*Page[CharacterSummary], error) {
 	return c.listCharactersPage(ctx, opts.Page, opts.PageSize)
 }

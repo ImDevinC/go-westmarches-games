@@ -2,6 +2,7 @@ package westmarches
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 )
@@ -75,6 +76,90 @@ func TestCollectAllErrorPropagates(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error to propagate from CollectAll")
+	}
+}
+
+func TestWalkVisitsEveryPage(t *testing.T) {
+	pages := map[int][]CharacterSummary{
+		1: {{ID: "c1", Name: "A"}, {ID: "c2", Name: "B"}},
+		2: {{ID: "c3", Name: "C"}},
+	}
+	var visited []string
+	c, _, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		page := atoiOr(r.URL.Query().Get("page"), 1)
+		writeJSON(t, w, 200, map[string]any{
+			"success":    true,
+			"data":       pages[page],
+			"pagination": map[string]any{"page": page, "pageSize": 2, "total": 3, "totalPages": 2},
+		})
+	})
+
+	err := Walk(context.Background(), 2, func(ctx context.Context, page, pageSize int) (*Page[CharacterSummary], error) {
+		return c.ListCharacters(ctx, ListOptions{Page: page, PageSize: pageSize})
+	}, func(page *Page[CharacterSummary]) error {
+		for _, item := range page.Data {
+			visited = append(visited, item.ID)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Walk: %v", err)
+	}
+	if len(visited) != 3 || visited[0] != "c1" || visited[2] != "c3" {
+		t.Errorf("unexpected visited order: %v", visited)
+	}
+}
+
+func TestWalkStopsEarlyOnErrStopIteration(t *testing.T) {
+	calls := 0
+	c, _, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		page := atoiOr(r.URL.Query().Get("page"), 1)
+		writeJSON(t, w, 200, map[string]any{
+			"success":    true,
+			"data":       []map[string]any{{"id": "c1", "name": "A", "level": 1, "experience": 0, "status": "ACTIVE", "isApproved": true, "user": map[string]any{"id": "u1"}}},
+			"pagination": map[string]any{"page": page, "pageSize": 1, "total": 5, "totalPages": 5},
+		})
+	})
+
+	seen := 0
+	err := Walk(context.Background(), 1, func(ctx context.Context, page, pageSize int) (*Page[CharacterSummary], error) {
+		return c.ListCharacters(ctx, ListOptions{Page: page, PageSize: pageSize})
+	}, func(page *Page[CharacterSummary]) error {
+		seen += len(page.Data)
+		if seen >= 1 {
+			return ErrStopIteration
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Walk: %v", err)
+	}
+	if seen != 1 {
+		t.Errorf("seen = %d, want 1", seen)
+	}
+	if calls != 1 {
+		t.Errorf("expected 1 fetch when stopping early, got %d", calls)
+	}
+}
+
+func TestWalkCallbackErrorPropagates(t *testing.T) {
+	c, _, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(t, w, 200, map[string]any{
+			"success":    true,
+			"data":       []map[string]any{{"id": "c1", "name": "A", "level": 1, "experience": 0, "status": "ACTIVE", "isApproved": true, "user": map[string]any{"id": "u1"}}},
+			"pagination": map[string]any{"page": 1, "pageSize": 1, "total": 5, "totalPages": 5},
+		})
+	})
+
+	sentinel := errors.New("stop")
+	err := Walk(context.Background(), 1, func(ctx context.Context, page, pageSize int) (*Page[CharacterSummary], error) {
+		return c.ListCharacters(ctx, ListOptions{Page: page, PageSize: pageSize})
+	}, func(page *Page[CharacterSummary]) error {
+		return sentinel
+	})
+	if !errors.Is(err, sentinel) {
+		t.Fatalf("expected callback error to propagate, got %v", err)
 	}
 }
 

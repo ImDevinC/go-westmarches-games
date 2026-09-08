@@ -7,7 +7,8 @@ import (
 
 // ListArticles returns all published, public wiki articles in the community.
 // Excludes drafts, GM-only pages, and archived pages. Ordered alphabetically
-// by title. Pass this method to CollectAll to retrieve every page in one call.
+// by title. Pass a closure wrapping this method to Walk or CollectAll to
+// retrieve every page in one call.
 func (c *Client) ListArticles(ctx context.Context, opts ListArticlesOptions) (*Page[ArticleSummary], error) {
 	extra := url.Values{}
 	if opts.Search != "" {

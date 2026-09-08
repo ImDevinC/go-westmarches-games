@@ -13,8 +13,9 @@ headers), and includes helpers for paginating through large collections.
 - **Rate limiting** — a built-in token-bucket limiter (100 requests/minute by
   default, matching the server) plus parsed `X-RateLimit-*` headers exposed on
   every response and on the client.
-- **Pagination** — typed `Page[T]` results with a `CollectAll` helper that
-  walks every page for you.
+- **Pagination** — typed `Page[T]` results with `Walk` (an idiomatic,
+  callback-driven pagination helper) and a `CollectAll` convenience wrapper
+  that materializes the full result set.
 - **Typed errors** — `*APIError` with the HTTP status code, the server's error
   message, and helpers like `IsNotFound()` / `IsRateLimited()`.
 - **Zero dependencies** — only the Go standard library.
@@ -44,15 +45,17 @@ func main() {
 	ctx := context.Background()
 	client := westmarches.NewClient("wm_your_api_key_here")
 
-	// Fetch every character across all pages.
-	characters, err := westmarches.CollectAll(ctx, 500, func(ctx context.Context, page, pageSize int) (*westmarches.Page[westmarches.CharacterSummary], error) {
+	// Page through every character, processing results as they arrive.
+	err := westmarches.Walk(ctx, 500, func(ctx context.Context, page, pageSize int) (*westmarches.Page[westmarches.CharacterSummary], error) {
 		return client.ListCharacters(ctx, westmarches.ListOptions{Page: page, PageSize: pageSize})
+	}, func(page *westmarches.Page[westmarches.CharacterSummary]) error {
+		for _, c := range page.Data {
+			fmt.Printf("%s (level %d)\n", c.Name, c.Level)
+		}
+		return nil
 	})
 	if err != nil {
 		log.Fatal(err)
-	}
-	for _, c := range characters {
-		fmt.Printf("%s (level %d)\n", c.Name, c.Level)
 	}
 }
 ```
@@ -101,7 +104,27 @@ page, err := client.ListCharacters(ctx, westmarches.ListOptions{Page: 2, PageSiz
 // page.Pagination Total, TotalPages, Page, PageSize
 ```
 
-To fetch the entire result set in one call, use `CollectAll`:
+To page through the entire result set, use `Walk`. It fetches each page in
+order and invokes your callback as pages arrive, so results are processed
+incrementally instead of being buffered all at once. Return
+`westmarches.ErrStopIteration` from the callback to stop early:
+
+```go
+err := westmarches.Walk(ctx, 500, func(ctx context.Context, page, pageSize int) (*westmarches.Page[westmarches.CharacterSummary], error) {
+	return client.ListCharacters(ctx, westmarches.ListOptions{Page: page, PageSize: pageSize})
+}, func(page *westmarches.Page[westmarches.CharacterSummary]) error {
+	for _, c := range page.Data {
+		fmt.Printf("%s (level %d)\n", c.Name, c.Level)
+	}
+	return nil // or westmarches.ErrStopIteration to stop early
+})
+if err != nil {
+	log.Fatal(err)
+}
+```
+
+If you want the complete result set materialized as a slice, use the
+`CollectAll` convenience wrapper, which is built on top of `Walk`:
 
 ```go
 allAdventures, err := westmarches.CollectAll(ctx, 500, func(ctx context.Context, page, pageSize int) (*westmarches.Page[westmarches.AdventureSummary], error) {
