@@ -248,6 +248,30 @@ go vet ./...
 go test ./...
 ```
 
+## Releases
+
+Releases are fully automated with [semantic-release](https://semantic-release.gitbook.io/).
+Merges to `main` run the `Release` GitHub Actions workflow, which builds and
+tests the library, then creates a `vX.Y.Z` git tag and a matching GitHub
+release with auto-generated release notes. No container images are published.
+
+The next version is derived from [conventional commits](https://www.conventionalcommits.org/):
+
+- `feat` → minor bump
+- `fix`, `perf`, `refactor` → patch bump
+- `docs`, `style`, `test`, `chore`, `ci`, `build`, `revert` → no release
+
+The `Commitlint` workflow enforces the conventional-commit format on every pull
+request, so the release analysis always has reliable input. Commit messages
+must use a lowercase type and one of the types listed above.
+
+CI tooling lives in `package.json` (`npm ci` installs it). To preview the next
+release locally:
+
+```sh
+GITHUB_TOKEN=<token> npx semantic-release --dry-run
+```
+
 ## Documentation
 
 See `AGENTS.md` for maintainer and agent conventions. The upstream API spec is
