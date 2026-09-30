@@ -23,7 +23,7 @@ headers), and includes helpers for paginating through large collections.
 ## Installation
 
 ```sh
-go get github.com/ImDevinC/go-westmarches-games
+go get github.com/imdevinc/go-westmarches-games
 ```
 
 Requires Go 1.21 or later.
@@ -38,7 +38,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/ImDevinC/go-westmarches-games"
+	"github.com/imdevinc/go-westmarches-games"
 )
 
 func main() {

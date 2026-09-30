@@ -45,7 +45,7 @@ AGENTS.md           This file
 
 ## Conventions
 
-- **Language:** Go (module `github.com/ImDevinC/go-westmarches-games`,
+- **Language:** Go (module `github.com/imdevinc/go-westmarches-games`,
   requires Go 1.21+). Standard library only — do not add external dependencies.
 - **Package layout:** a single package `westmarches`. Split implementation by
   resource area (one file per endpoint group).
