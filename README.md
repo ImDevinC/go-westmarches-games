@@ -90,8 +90,11 @@ if rl := client.RateLimit(); rl != nil {
 }
 ```
 
-If the server returns `429 Too Many Requests`, the error is an `*APIError` with
-`IsRateLimited() == true`.
+If the server returns `429 Too Many Requests`, GET requests retry up to three
+times. The client waits for `Retry-After`, then the rate-limit reset time, or a
+short exponential backoff. The client does not retry write requests. The final
+`*APIError` includes the parsed rate-limit headers and `Retry-After` value, and
+its error text shows available quota details when the server sends them.
 
 ## Pagination
 

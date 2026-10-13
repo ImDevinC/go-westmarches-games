@@ -98,6 +98,8 @@ The client:
 - throttles client-side via a token-bucket limiter in `ratelimit.go`
   (configured with `WithRateLimit(n)`; `0` disables it);
 - stores the latest server-reported status, readable via `Client.RateLimit()`.
+- retries GET requests up to three times after HTTP 429, honoring `Retry-After`
+  or the reported reset time; write requests are not retried automatically.
 
 If you change rate-limit behaviour, update `README.md` (Rate limiting section)
 and keep tests in `ratelimit_test.go` and `client_test.go` in sync.

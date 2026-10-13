@@ -1,6 +1,10 @@
 package westmarches
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 // APIError represents an error response returned by the West Marches API.
 // It wraps the HTTP status code and, when the server provided one, the
@@ -14,6 +18,10 @@ type APIError struct {
 	Message string
 	// RateLimit is the rate-limit status reported alongside the error, if any.
 	RateLimit *RateLimit
+	// RetryAfter is the delay requested by the server, if provided.
+	RetryAfter time.Duration
+	// HasRetryAfter reports whether the server sent a Retry-After header.
+	HasRetryAfter bool
 }
 
 // Error implements the error interface.
@@ -22,7 +30,27 @@ func (e *APIError) Error() string {
 	if msg == "" {
 		msg = httpStatusText(e.StatusCode)
 	}
-	return fmt.Sprintf("westmarches: API request failed (status %d): %s", e.StatusCode, msg)
+	message := fmt.Sprintf("westmarches: API request failed (status %d): %s", e.StatusCode, msg)
+	if !e.IsRateLimited() {
+		return message
+	}
+
+	var details []string
+	if e.RateLimit != nil {
+		if e.RateLimit.Limit > 0 {
+			details = append(details, fmt.Sprintf("%d/%d requests remaining", e.RateLimit.Remaining, e.RateLimit.Limit))
+		}
+		if !e.RateLimit.Reset.IsZero() {
+			details = append(details, "resets at "+e.RateLimit.Reset.Format(time.RFC3339))
+		}
+	}
+	if e.RetryAfter > 0 {
+		details = append(details, "retry after "+e.RetryAfter.String())
+	}
+	if len(details) == 0 {
+		return message
+	}
+	return message + " (" + strings.Join(details, "; ") + ")"
 }
 
 // IsNotFound reports whether the error is a 404 Not Found response.

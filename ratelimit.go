@@ -23,12 +23,15 @@ func newRateLimiter(requestsPerMinute int) *rateLimiter {
 	if requestsPerMinute <= 0 {
 		requestsPerMinute = 1
 	}
-	// Allow a burst equal to the per-second refill (i.e. roughly a second of
-	// budget) so that a handful of rapid calls still succeed.
+	// Allow a burst equal to the per-second refill, with a one-token minimum.
 	refillPerSec := float64(requestsPerMinute) / 60.0
+	burst := refillPerSec
+	if burst < 1 {
+		burst = 1
+	}
 	return &rateLimiter{
-		tokens:       refillPerSec,
-		maxTokens:    refillPerSec,
+		tokens:       burst,
+		maxTokens:    burst,
 		refillPerSec: refillPerSec,
 		lastRefill:   time.Now(),
 	}

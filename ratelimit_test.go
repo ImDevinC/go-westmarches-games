@@ -57,3 +57,13 @@ func TestRateLimiterZeroValueDefaultsToOne(t *testing.T) {
 		t.Errorf("expected refillPerSec > 0, got %v", l.refillPerSec)
 	}
 }
+
+func TestRateLimiterBelowOneRequestPerSecondCanAcquireToken(t *testing.T) {
+	l := newRateLimiter(30)
+	if l.tokens < 1 {
+		t.Fatalf("initial tokens = %v, want at least 1", l.tokens)
+	}
+	if err := l.wait(context.Background()); err != nil {
+		t.Fatalf("wait: %v", err)
+	}
+}

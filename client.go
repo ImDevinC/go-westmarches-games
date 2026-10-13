@@ -28,6 +28,8 @@ const DefaultUserAgent = "westmarches-go/1.0.0"
 // allows per API key, used by the built-in rate limiter.
 const DefaultRateLimit = 100
 
+const maxRateLimitRetries = 3
+
 // Options holds the client configuration. Use the With* functional options to
 // build a *Client.
 type Options struct {
@@ -118,59 +120,115 @@ func (c *Client) RateLimit() *RateLimit {
 // do performs a request, applies rate limiting, parses response headers, and
 // returns the raw response body. Non-2xx responses are returned as *APIError.
 func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte, error) {
-	if c.limiter != nil {
-		if err := c.limiter.wait(ctx); err != nil {
-			return nil, err
-		}
-	}
-
-	var bodyReader io.Reader
+	var encodedBody []byte
 	if body != nil {
-		b, err := json.Marshal(body)
+		var err error
+		encodedBody, err = json.Marshal(body)
 		if err != nil {
 			return nil, fmt.Errorf("westmarches: encoding request body: %w", err)
 		}
-		bodyReader = bytes.NewReader(b)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bodyReader)
-	if err != nil {
-		return nil, fmt.Errorf("westmarches: building request: %w", err)
-	}
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
-	}
+	for retry := 0; ; retry++ {
+		if c.limiter != nil {
+			if err := c.limiter.wait(ctx); err != nil {
+				return nil, err
+			}
+		}
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("westmarches: sending request: %w", err)
-	}
-	defer resp.Body.Close()
+		var bodyReader io.Reader
+		if body != nil {
+			bodyReader = bytes.NewReader(encodedBody)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bodyReader)
+		if err != nil {
+			return nil, fmt.Errorf("westmarches: building request: %w", err)
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if c.userAgent != "" {
+			req.Header.Set("User-Agent", c.userAgent)
+		}
 
-	rl := parseRateLimit(resp.Header)
-	c.setRateLimit(rl)
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("westmarches: sending request: %w", err)
+		}
 
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("westmarches: reading response: %w", err)
-	}
+		rl := parseRateLimit(resp.Header)
+		c.setRateLimit(rl)
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		data, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("westmarches: reading response: %w", readErr)
+		}
+
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return data, nil
+		}
+
 		var e Error
 		_ = json.Unmarshal(data, &e)
-		return nil, &APIError{
-			StatusCode: resp.StatusCode,
-			Success:    e.Success,
-			Message:    e.Error,
-			RateLimit:  rl,
+		retryAfter, hasRetryAfter := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+		apiErr := &APIError{
+			StatusCode:    resp.StatusCode,
+			Success:       e.Success,
+			Message:       e.Error,
+			RateLimit:     rl,
+			RetryAfter:    retryAfter,
+			HasRetryAfter: hasRetryAfter,
+		}
+		if apiErr.IsRateLimited() && method == http.MethodGet && retry < maxRateLimitRetries {
+			if err := waitForRetry(ctx, rateLimitRetryDelay(apiErr, retry)); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		return nil, apiErr
+	}
+}
+
+func parseRetryAfter(value string, now time.Time) (time.Duration, bool) {
+	if seconds, err := strconv.Atoi(value); err == nil && seconds >= 0 {
+		return time.Duration(seconds) * time.Second, true
+	}
+	if resetAt, err := http.ParseTime(value); err == nil {
+		if delay := resetAt.Sub(now); delay > 0 {
+			return delay, true
+		}
+		return 0, true
+	}
+	return 0, false
+}
+
+func rateLimitRetryDelay(apiErr *APIError, retry int) time.Duration {
+	if apiErr.HasRetryAfter {
+		return apiErr.RetryAfter
+	}
+	if apiErr.RateLimit != nil {
+		if delay := time.Until(apiErr.RateLimit.Reset); delay > 0 {
+			return delay + 100*time.Millisecond
 		}
 	}
-	return data, nil
+	return time.Second << retry
+}
+
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	if delay <= 0 {
+		return ctx.Err()
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // setRateLimit stores the latest server-reported rate limit.

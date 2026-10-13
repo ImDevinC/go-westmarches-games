@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestNewClientDefaults(t *testing.T) {
@@ -130,6 +132,96 @@ func TestClientDoAPIErrorWithoutBody(t *testing.T) {
 	}
 	if !apiErr.IsRateLimited() {
 		t.Error("expected IsRateLimited() to be true")
+	}
+}
+
+func TestClientRetriesRateLimitedGET(t *testing.T) {
+	requests := 0
+	c, _, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if requests == 1 {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		writeJSON(t, w, http.StatusOK, map[string]any{"success": true, "data": map[string]any{}})
+	})
+
+	if _, err := c.do(context.Background(), http.MethodGet, "/characters/example", nil); err != nil {
+		t.Fatalf("GET after rate-limit response: %v", err)
+	}
+	if requests != 2 {
+		t.Errorf("request count = %d, want 2", requests)
+	}
+}
+
+func TestClientDoesNotRetryWriteOnRateLimit(t *testing.T) {
+	requests := 0
+	c, _, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		rateLimitHeaders(w)
+		w.Header().Set("Retry-After", "0")
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+
+	_, err := c.do(context.Background(), http.MethodPost, "/characters/example/rewards", map[string]any{"reward": true})
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error = %T, want *APIError", err)
+	}
+	if requests != 1 {
+		t.Errorf("request count = %d, want 1", requests)
+	}
+	if apiErr.RetryAfter != 0 {
+		t.Errorf("RetryAfter = %s, want 0s", apiErr.RetryAfter)
+	}
+	if !apiErr.HasRetryAfter {
+		t.Error("HasRetryAfter = false, want true")
+	}
+	if !strings.Contains(apiErr.Error(), "87/100 requests remaining") {
+		t.Errorf("error = %q, want rate-limit details", apiErr.Error())
+	}
+}
+
+func TestClientStopsAfterRateLimitRetries(t *testing.T) {
+	requests := 0
+	c, _, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		w.Header().Set("Retry-After", "0")
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+
+	_, err := c.do(context.Background(), http.MethodGet, "/characters/example", nil)
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || !apiErr.IsRateLimited() {
+		t.Fatalf("error = %v, want rate-limited *APIError", err)
+	}
+	if want := maxRateLimitRetries + 1; requests != want {
+		t.Errorf("request count = %d, want %d", requests, want)
+	}
+}
+
+func TestParseRetryAfter(t *testing.T) {
+	now := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	date := now.Add(30 * time.Second).Format(http.TimeFormat)
+
+	for _, test := range []struct {
+		name  string
+		value string
+		want  time.Duration
+		ok    bool
+	}{
+		{name: "seconds", value: "12", want: 12 * time.Second, ok: true},
+		{name: "date", value: date, want: 30 * time.Second, ok: true},
+		{name: "zero", value: "0", want: 0, ok: true},
+		{name: "invalid", value: "later", ok: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, ok := parseRetryAfter(test.value, now)
+			if got != test.want || ok != test.ok {
+				t.Errorf("parseRetryAfter(%q) = (%s, %t), want (%s, %t)", test.value, got, ok, test.want, test.ok)
+			}
+		})
 	}
 }
 
