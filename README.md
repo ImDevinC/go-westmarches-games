@@ -170,6 +170,7 @@ All operations from the OpenAPI spec are implemented:
 | GET | `/characters` | `ListCharacters` |
 | GET | `/characters/{characterId}` | `GetCharacter` |
 | GET | `/characters/{characterId}/stats` | `GetCharacterStats` |
+| GET | `/characters/{characterId}/rewards` | `ListCharacterRewards` |
 | POST | `/characters/{characterId}/rewards` | `DistributeReward` |
 | PATCH | `/characters/{characterId}/status` | `UpdateCharacterStatus` |
 | POST | `/characters/{characterId}/approve` | `ApproveCharacter` |
@@ -210,6 +211,15 @@ resp, err := client.DistributeBulkRewards(ctx, westmarches.BulkRewardsRequest{
 		{CharacterID: "char_2", Experience: 100, Currencies: map[string]float64{"cl1": 50}},
 	},
 })
+```
+
+### List a character's reward log
+
+```go
+page, err := client.ListCharacterRewards(ctx, "char_abc", westmarches.ListOptions{Page: 1, PageSize: 50})
+for _, entry := range page.Data {
+	fmt.Printf("%s: %+d XP, reverted=%t\n", entry.CreatedAt, entry.Experience, entry.IsReverted)
+}
 ```
 
 ### Update a character's data table

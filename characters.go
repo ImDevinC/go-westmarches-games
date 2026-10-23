@@ -60,6 +60,27 @@ func (c *Client) GetCharacterStats(ctx context.Context, characterID string) (*Dn
 	return &out, nil
 }
 
+// ListCharacterRewards returns the character's reward log, newest first. The
+// log includes purchases, transfers, travel costs, starting values, and
+// reverted entries. Requires read permission. Pass a closure wrapping this
+// method to Walk or CollectAll to retrieve every page in one call.
+func (c *Client) ListCharacterRewards(ctx context.Context, characterID string, opts ListOptions) (*Page[RewardLogEntry], error) {
+	path := "/characters/" + url.PathEscape(characterID) + "/rewards" + queryFromOptions(opts, nil)
+	data, err := c.do(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	var env struct {
+		Success    bool             `json:"success"`
+		Data       []RewardLogEntry `json:"data"`
+		Pagination Pagination       `json:"pagination"`
+	}
+	if err := jsonUnmarshal(data, &env); err != nil {
+		return nil, err
+	}
+	return &Page[RewardLogEntry]{Data: env.Data, Pagination: env.Pagination}, nil
+}
+
 // DistributeReward awards experience and/or currencies to a character.
 // Requires write permission.
 func (c *Client) DistributeReward(ctx context.Context, characterID string, req RewardRequest) (*RewardResponse, error) {
