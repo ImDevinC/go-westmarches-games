@@ -323,6 +323,71 @@ type RewardRequest struct {
 	Items      []RewardItem       `json:"items,omitempty"`
 }
 
+// RewardLogSubtype identifies what kind of reward-log entry this is. A nil
+// value means a reward given on the site or through the API. New subtypes may
+// be added by the server, so treat unknown values like nil.
+type RewardLogSubtype string
+
+const (
+	RewardLogSubtypeGMReward        RewardLogSubtype = "GM_REWARD"
+	RewardLogSubtypeCharacterStart  RewardLogSubtype = "CHARACTER_START"
+	RewardLogSubtypeItemPurchase    RewardLogSubtype = "ITEM_PURCHASE"
+	RewardLogSubtypeTravel          RewardLogSubtype = "TRAVEL"
+	RewardLogSubtypeTransferOut     RewardLogSubtype = "TRANSFER_OUT"
+	RewardLogSubtypeTransferIn      RewardLogSubtype = "TRANSFER_IN"
+	RewardLogSubtypeItemTransferOut RewardLogSubtype = "ITEM_TRANSFER_OUT"
+	RewardLogSubtypeItemTransferIn  RewardLogSubtype = "ITEM_TRANSFER_IN"
+)
+
+// RewardLogItem is the marketplace item bought for an ITEM_PURCHASE entry.
+type RewardLogItem struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+// RewardLogAdventure is the adventure a reward was given for.
+type RewardLogAdventure struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	StartTime string `json:"startTime"`
+}
+
+// RewardLogCharacter references the other character in a transfer.
+type RewardLogCharacter struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// RewardLogInventoryItem is an inventory item added by a reward-log entry.
+type RewardLogInventoryItem struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Quantity     int    `json:"quantity"`
+	RemainingQty int    `json:"remainingQty"`
+}
+
+// RewardLogEntry is one entry in a character's reward log, as shown on the
+// character's Rewards tab. It includes purchases, transfers, travel costs,
+// starting values, and reverted entries.
+type RewardLogEntry struct {
+	ID              string                   `json:"id"`
+	CreatedAt       string                   `json:"createdAt"`
+	Subtype         *RewardLogSubtype        `json:"subtype"`
+	Experience      int                      `json:"experience"`
+	Currencies      []CharacterCurrency      `json:"currencies"`
+	Item            *RewardLogItem           `json:"item"`
+	Quantity        *int                     `json:"quantity"`
+	Reason          *string                  `json:"reason"`
+	LevelUp         bool                     `json:"levelUp"`
+	IsReverted      bool                     `json:"isReverted"`
+	RevertReason    *string                  `json:"revertReason"`
+	APIKeyName      *string                  `json:"apiKeyName"`
+	AwardedBy       *UserRef                 `json:"awardedBy"`
+	Adventure       *RewardLogAdventure      `json:"adventure"`
+	LinkedCharacter *RewardLogCharacter      `json:"linkedCharacter"`
+	InventoryItems  []RewardLogInventoryItem `json:"inventoryItems"`
+}
+
 // RewardResponse is the result of distributing a reward to a character.
 type RewardResponse struct {
 	CharacterID   string             `json:"characterId"`

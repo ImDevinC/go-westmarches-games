@@ -165,6 +165,107 @@ func TestGetCharacterStats(t *testing.T) {
 	_ = reqs
 }
 
+func TestListCharacterRewards(t *testing.T) {
+	c, _, reqs := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			t.Errorf("method = %s", r.Method)
+		}
+		if r.URL.RawPath != "/characters/char%2Fid/rewards" {
+			t.Errorf("raw path = %q, want escaped id", r.URL.RawPath)
+		}
+		if got := r.URL.Query().Get("page"); got != "2" {
+			t.Errorf("page = %q", got)
+		}
+		if got := r.URL.Query().Get("pageSize"); got != "50" {
+			t.Errorf("pageSize = %q", got)
+		}
+		writeJSON(t, w, 200, map[string]any{
+			"success": true,
+			"data": []map[string]any{
+				{
+					"id": "rl_1", "createdAt": "2024-01-02T00:00:00Z",
+					"subtype":    "ITEM_PURCHASE",
+					"experience": 0,
+					"currencies": []any{
+						map[string]any{"currencyId": "cl1", "currencyName": "Gold", "amount": -50},
+					},
+					"item":            map[string]any{"name": "Healing Potion", "description": "Restores 2d4+2 HP"},
+					"quantity":        1,
+					"reason":          "Bought from the Emporium",
+					"levelUp":         false,
+					"isReverted":      false,
+					"revertReason":    nil,
+					"apiKeyName":      nil,
+					"awardedBy":       map[string]any{"id": "user_1", "discordId": nil},
+					"adventure":       nil,
+					"linkedCharacter": nil,
+					"inventoryItems": []any{
+						map[string]any{"id": "item_1", "name": "Healing Potion", "quantity": 1, "remainingQty": 1},
+					},
+				},
+				{
+					"id": "rl_2", "createdAt": "2024-01-01T00:00:00Z",
+					"subtype":      nil,
+					"experience":   100,
+					"currencies":   []any{},
+					"item":         nil,
+					"quantity":     nil,
+					"reason":       "Quest reward",
+					"levelUp":      true,
+					"isReverted":   false,
+					"revertReason": nil,
+					"apiKeyName":   "Foundry",
+					"awardedBy":    map[string]any{"id": "user_2"},
+					"adventure": map[string]any{
+						"id": "adv_1", "title": "The Lost Mine", "startTime": "2023-12-31T18:00:00Z",
+					},
+					"linkedCharacter": nil,
+					"inventoryItems":  []any{},
+				},
+			},
+			"pagination": map[string]any{"page": 2, "pageSize": 50, "total": 2, "totalPages": 1},
+		})
+	})
+
+	page, err := c.ListCharacterRewards(context.Background(), "char/id", ListOptions{Page: 2, PageSize: 50})
+	if err != nil {
+		t.Fatalf("ListCharacterRewards: %v", err)
+	}
+	if len(page.Data) != 2 {
+		t.Fatalf("len(data) = %d", len(page.Data))
+	}
+	purchase := page.Data[0]
+	if purchase.Subtype == nil || *purchase.Subtype != RewardLogSubtypeItemPurchase {
+		t.Errorf("subtype = %v", purchase.Subtype)
+	}
+	if purchase.Item == nil || purchase.Item.Name != "Healing Potion" {
+		t.Errorf("item = %+v", purchase.Item)
+	}
+	if purchase.Quantity == nil || *purchase.Quantity != 1 {
+		t.Errorf("quantity = %v", purchase.Quantity)
+	}
+	if len(purchase.Currencies) != 1 || purchase.Currencies[0].Amount != -50 {
+		t.Errorf("currencies = %+v", purchase.Currencies)
+	}
+	if len(purchase.InventoryItems) != 1 || purchase.InventoryItems[0].RemainingQty != 1 {
+		t.Errorf("inventoryItems = %+v", purchase.InventoryItems)
+	}
+	reward := page.Data[1]
+	if reward.Subtype != nil {
+		t.Errorf("subtype = %v, want nil", reward.Subtype)
+	}
+	if reward.Adventure == nil || reward.Adventure.Title != "The Lost Mine" {
+		t.Errorf("adventure = %+v", reward.Adventure)
+	}
+	if reward.APIKeyName == nil || *reward.APIKeyName != "Foundry" {
+		t.Errorf("apiKeyName = %v", reward.APIKeyName)
+	}
+	if page.Pagination.TotalPages != 1 {
+		t.Errorf("pagination.totalPages = %d", page.Pagination.TotalPages)
+	}
+	_ = reqs
+}
+
 func TestDistributeReward(t *testing.T) {
 	c, _, reqs := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
